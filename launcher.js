@@ -1,4 +1,10 @@
+require('dotenv').config()
 const puppeteer = require('puppeteer');
+var AWS = require('aws-sdk');
+// Set the region 
+AWS.config.update({
+    region: 'us-east-1',
+});
 
 (async () => {
   const browser = await puppeteer.launch({
@@ -6,6 +12,11 @@ const puppeteer = require('puppeteer');
   });
   let only_one_time = false;
   const page = await browser.newPage();
+  let today = new Date(Date.now());
+  let day = today.getDate();
+  let month = today.getMonth() + 1;
+  let year = today.getFullYear();
+  let today_str = day + "/" + month + "/" + year;
   await page.goto('https://aranjuez.i2a.es/CronosWeb/Login');
   // EMAIL
   await page.waitForSelector("#ContentSection_uLogin_txtIdentificador")
@@ -46,15 +57,62 @@ const puppeteer = require('puppeteer');
   if(only_one_time) {
     console.log("11:00  ->  NO DISPONIBLE.");
     console.log("16:00  ->  " + free_spots_1 + " Libres")
+    //NO QUEREMOS RESERVA REALMENTE...YA SON LAS 15:00 O MAS
   }
   else {
     console.log("11:00  ->  " + free_spots_1 + " Libres")
     console.log("16:00  ->  " + free_spots_2 + " Libres")
-  }
-
-  // Controller
-  if(free_spots_1 > 0) {
-    console.log('LIBRE!!')
+    // Hay sitio a las 4???
+    if(free_spots_2 > 0) {
+      // READ RESERVED TICKETS FOR TODAY
+      var ddb = new AWS.DynamoDB({apiVersion: '2012-08-10'});
+      var params = {
+        TableName: 'scraping',
+        Key: {
+          'fecha': {S: today_str}
+        },
+        ProjectionExpression: 'entradas'
+      };
+      var reserved = 0;
+      
+      let result=ddb.getItem(params, function(err, data) {
+        if (err) {
+          console.log("Error", err);
+        } else {
+          //console.log("Success", data.Item);
+          if(data.Item != undefined) {
+            reserved = data.Item['entradas']['N']
+            console.log("Entradas reservadas: " + reserved)
+          }
+        }
+      });
+      await result.promise()
+      if(parseInt(reserved) < 2) {
+        // Reserve new tickets
+        await page.click("#collapseExample0 > div > div > div > ul > li:nth-child(2) > a > div > span");
+        await page.waitForSelector('#ContentSection_uAltaEventos_uAltaEventosZonas_ddlEntradas')
+        await page.click("#ContentSection_uAltaEventos_uAltaEventosZonas_Celda_1_25_25");
+        await page.waitForSelector('#divContenedorCarritoConfirmar > h2 > span')
+        await page.click("#ContentSection_lnkConfirmar");
+        reserved=parseInt(reserved) + 1;
+        var params = {
+          TableName: 'scraping',
+          Item: {
+            'fecha' : {S: today_str},
+            'entradas' : {N: reserved.toString()}
+          }
+        };
+        // Call DynamoDB to add the item to the table
+        ddb.putItem(params, function(err, data) {
+          if (err) {
+            console.log("Error", err);
+          } else {
+            console.log("Success", data);
+            console.log('Reservada una entrada!!!')
+          }
+        });
+      }
+    } 
   }
 
   await browser.close();
