@@ -13,10 +13,17 @@ AWS.config.update({
   let only_one_time = false;
   const page = await browser.newPage();
   let today = new Date(Date.now());
+  let day_str = today.toLocaleDateString('en-EN', { weekday: 'long' });
   let day = today.getDate();
   let month = today.getMonth() + 1;
   let year = today.getFullYear();
   let today_str = day + "/" + month + "/" + year;
+
+  if(day_str == 'Monday' || day_str == 'Wednesday' || day_str == 'Friday') {
+    console.log(today + '  -->  Not executing.')
+    process.exit()
+  }
+  
   await page.goto('https://aranjuez.i2a.es/CronosWeb/Login');
   // EMAIL
   await page.waitForSelector("#ContentSection_uLogin_txtIdentificador")
@@ -30,7 +37,7 @@ AWS.config.update({
   // Reserva de Eventos
   await page.waitForSelector('#ContentSection_uMenus_divMenus > ul > li:nth-child(3) > a > div.media-body > h4')
   const elem = await page.$eval("#ContentSection_uMenus_divMenus > ul > li:nth-child(3) > a > div.media-body > h4", el => el.textContent);
-  console.log(elem)
+  console.log(today + '  -->  ' + elem)
 
   // Entro en reserva de eventos
   await page.click("#ContentSection_uMenus_divMenus > ul > li:nth-child(3) > a > div.media-body > h4");
